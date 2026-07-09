@@ -4,7 +4,9 @@
 
 ### 1.1 Purpose
 [What this document describes and who it is for]
-This SRS docuement will describe the requirements needed for this task manager for team members.
+
+
+This SRS document will describe the requirements needed for this task manager for team members.
 ### 1.2 Scope
 [What the product does, in a short paragraph]
 Lets team members be coordinated and organized their work and projects with role based permissions and an AI chat bot that will help with organizaing users tasks.
