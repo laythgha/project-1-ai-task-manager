@@ -34,9 +34,13 @@ Team members who work remotely or need to be more organized. They use it as an a
 
 [Anything assumed to be true, and any limits on the solution]
 That there are reminders
+
 That there is a chatbot
+
 One constraint is using google to sign in
+
 ## 3. Specific Requirements
+
 
 ### 3.1 Functional Requirements
 
@@ -84,6 +88,7 @@ The request must load in under a second
 [Any APIs, third-party services, or integrations this system depends on]
 
 Google: Logging in
+
 Claude: Chatbot
 ## 4. Appendices
 
