@@ -43,21 +43,37 @@ One constraint is using google to sign in
 [Numbered list of what the system must do]
 
 The app must allow the user to sign in using Google or their email and password.
+
 The app must allow the user to create a workspace.
+
 The app must allow the user to join a workspace.
+
 The app must allow a user with Editor role to edit the workspace.
+
 The app must allow a user with Viewer role to only view the workspace.
+
 The app must allow a user with Admin role to delete the workspace.
+
 The app must allow a user with Admin role to add users.
+
 The app must allow the user to create projects in the workspace.
+
 The app must allow the user to create tasks in the project.
+
 The app must allow the user to edit tasks.
+
 The app must allow the user to prioritize tasks.
+
 The app must allow the user to create reminders.
+
 The app must allow the user to access the chatbot.
+
 The app must make the chatbot have the same permissions and guardrails as the user.
+
 The app must notify the user about reminders through their Gmail.
+
 The app must update anything the user adds or deletes in real time.
+
 
 ### 3.2 Non-Functional Requirements
 [Performance, security, usability, and similar expectations]
