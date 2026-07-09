@@ -26,7 +26,7 @@ There is not enough organization between team members and their projects which l
 
 [Who this is for]
 
-A team of office workers or a team workling remotely.
+A team of office workers or a team working remotely.
 
 ## Scope
 
