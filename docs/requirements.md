@@ -1,6 +1,4 @@
 # Requirements
-
-## Problem
 The app must allow the user to sign in using Google or their email and password.
 The app must allow the user to create a workspace.
 The app must allow the user to join a workspace.
@@ -17,6 +15,9 @@ The app must allow the user to access the chatbot.
 The app must make the chatbot have the same permissions and guardrails as the user.
 The app must notify the user about reminders through their Gmail.
 The app must update anything the user adds or deletes in real time.
+
+
+## Problem
 [What problem is being solved]
 
 There is not enough organizaiton between team memebrs and their projects which leads to missing deadlines and tasks falling through the cracks or not working.
