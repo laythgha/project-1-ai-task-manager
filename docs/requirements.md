@@ -20,7 +20,7 @@ The app must update anything the user adds or deletes in real time.
 ## Problem
 [What problem is being solved]
 
-There is not enough organizaiton between team memebrs and their projects which leads to missing deadlines and tasks falling through the cracks or not working.
+There is not enough organization between team members and their projects which leads to missing deadlines and tasks falling through the cracks or not working.
 
 ## User
 
