@@ -96,7 +96,7 @@ app.use(passport.session());
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: "http://localhost:3000/auth/google/callback"
+  callbackURL: process.env.BACKEND_URL + "/auth/google/callback"
 },
 async (accessToken, refreshToken, profile, done) => {
   const email = profile.emails[0].value;
@@ -403,7 +403,7 @@ app.get('/auth/google',
 app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/' }),
   (req, res) => {
-    res.redirect(`http://localhost:5173?userId=${req.user.id}`);
+    res.redirect(`${process.env.FRONTEND_URL}?userId=${req.user.id}`);
   }
 );
 server.listen(PORT, () => {
