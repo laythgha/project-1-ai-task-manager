@@ -4,12 +4,12 @@ Fill this file in as you go. This is what you submit and what you present from o
 
 ## Candidate
 
-- Name:
+- Name: Layth Gharbia
 - Date submitted:
 
 ## Links
 
-- Live URL:
+- Live URL: https://project-1-ai-task-manager-1frontt.onrender.com
 - Repository:
 - Project board:
 - Loom walkthrough video:
