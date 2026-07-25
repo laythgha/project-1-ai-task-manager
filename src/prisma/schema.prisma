@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+model Roles {
+	id Int @id @default(autoincrement())
+	role_name String
+	workspace_membership WorkspaceMembership[]
+
+}
+
+model Workspaces {
+	id Int @id @default(autoincrement())
+	workspace_name String
+	projects Projects[]
+	workspace_membership WorkspaceMembership[]
+
+}
+
+model Users {
+	id Int @id @default(autoincrement())
+	name String
+	email String @unique
+	password_hashed String
+	signin_method String
+	workspace_membership WorkspaceMembership[]
+}
+
+model Projects {
+	id Int @id @default(autoincrement())
+	workspace_id Int
+	project_name String
+	tasks Tasks[]
+	workspace Workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+
+
+}
+
+model Tasks {
+	id Int @id @default(autoincrement())
+	project_id Int
+	task_name String
+	priority String @default("Medium")
+	reminders Reminders[]
+	project Projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+}
+
+model WorkspaceMembership {
+	id Int @id @default(autoincrement())
+	user_id Int
+	workspace_id Int
+	role_id Int
+	workspace Workspaces @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+	role Roles @relation(fields: [role_id], references: [id], onDelete: Cascade)
+	user Users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+}
+
+model Reminders {
+	id Int @id @default(autoincrement())
+	task_id Int
+	reminder_date DateTime
+	sent Boolean
+	task Tasks @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+}
