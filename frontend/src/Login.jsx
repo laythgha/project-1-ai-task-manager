@@ -24,8 +24,8 @@ function Login({ onLogin }) {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = 'http://localhost:3000/auth/google';
-  };
+  window.location.href = `${import.meta.env.VITE_API_URL}/auth/google`;
+};
 
   return (
     <div style={{ maxWidth: 400, margin: '80px auto', fontFamily: 'sans-serif' }}>
