@@ -13,6 +13,7 @@ const { PrismaClient } = require('./generated/prisma');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { generateToken, authenticate } = require('./auth');
 const { can } = require('./permissions');
+const { sendGmailEmail } = require('./gmail');
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 const app = express();
@@ -23,7 +24,6 @@ app.use(cors({
 
 const http = require('http');
 const { Server } = require('socket.io');
-const nodemailer = require('nodemailer');
 if (require.main === module) {
   setInterval(async () => {
     const now = new Date();
@@ -41,13 +41,6 @@ if (require.main === module) {
     }
   }, 60000);
 }
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD
-  }
-});
 
 const tools = [
   {
@@ -167,8 +160,7 @@ async function sendReminderEmail(reminder) {
 
   const user = await prisma.users.findUnique({ where: { id: reminder.user_id } });
 
-  await transporter.sendMail({
-    from: process.env.GMAIL_USER,
+  await sendGmailEmail({
     to: user.email,
     subject: `Reminder: ${task.task_name}`,
     text: `This is a reminder for your task "${task.task_name}" in project "${task.project.project_name}" (workspace: "${task.project.workspace.workspace_name}").`
