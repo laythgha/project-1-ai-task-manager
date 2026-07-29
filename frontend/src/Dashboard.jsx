@@ -23,6 +23,11 @@ function Dashboard({ userId }) {
   const [chatMessage, setChatMessage] = useState('');
   const [chatLog, setChatLog] = useState([]);
 
+  const [members, setMembers] = useState([]);
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState('Viewer');
+  const [memberError, setMemberError] = useState('');
+
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
@@ -53,15 +58,30 @@ function Dashboard({ userId }) {
     const handleTaskDeleted = ({ id }) => {
       setTasks((prev) => prev.filter((t) => t.id !== id));
     };
+    const handleMemberAdded = (member) => {
+      setMembers((prev) => [...prev, member]);
+    };
+    const handleMemberUpdated = ({ user_id, role_name }) => {
+      setMembers((prev) => prev.map((m) => (m.user_id === user_id ? { ...m, role_name } : m)));
+    };
+    const handleMemberRemoved = ({ user_id }) => {
+      setMembers((prev) => prev.filter((m) => m.user_id !== user_id));
+    };
 
     socket.on('task_created', handleTaskCreated);
     socket.on('task_updated', handleTaskUpdated);
     socket.on('task_deleted', handleTaskDeleted);
+    socket.on('member_added', handleMemberAdded);
+    socket.on('member_updated', handleMemberUpdated);
+    socket.on('member_removed', handleMemberRemoved);
 
     return () => {
       socket.off('task_created', handleTaskCreated);
       socket.off('task_updated', handleTaskUpdated);
       socket.off('task_deleted', handleTaskDeleted);
+      socket.off('member_added', handleMemberAdded);
+      socket.off('member_updated', handleMemberUpdated);
+      socket.off('member_removed', handleMemberRemoved);
     };
   }, [socket, activeWorkspace, activeProject]);
 
@@ -72,6 +92,10 @@ function Dashboard({ userId }) {
       setActiveProject(null);
       setTasks([]);
     });
+    api.get(`/workspaces/${activeWorkspace.id}/members`).then((res) => {
+      setMembers(res.data);
+    });
+    setMemberError('');
   }, [activeWorkspace]);
 
   useEffect(() => {
@@ -119,6 +143,47 @@ function Dashboard({ userId }) {
   setNewTaskDueDate('');
   setNewTaskHours('');
 };
+
+  const currentUserRole = members.find((m) => m.user_id === userId)?.role_name;
+
+  const addMember = async () => {
+    if (!newMemberEmail || !activeWorkspace) return;
+    setMemberError('');
+    try {
+      await api.post(`/workspaces/${activeWorkspace.id}/members`, {
+        email: newMemberEmail,
+        role_name: newMemberRole,
+        user_id: userId,
+      });
+      setNewMemberEmail('');
+      setNewMemberRole('Viewer');
+    } catch (err) {
+      setMemberError(err.response?.data?.message || 'Something went wrong');
+    }
+  };
+
+  const updateMemberRole = async (targetUserId, role_name) => {
+    setMemberError('');
+    try {
+      await api.patch(`/workspaces/${activeWorkspace.id}/members/${targetUserId}`, {
+        role_name,
+        user_id: userId,
+      });
+    } catch (err) {
+      setMemberError(err.response?.data?.message || 'Something went wrong');
+    }
+  };
+
+  const removeMember = async (targetUserId) => {
+    setMemberError('');
+    try {
+      await api.delete(`/workspaces/${activeWorkspace.id}/members/${targetUserId}`, {
+        data: { user_id: userId },
+      });
+    } catch (err) {
+      setMemberError(err.response?.data?.message || 'Something went wrong');
+    }
+  };
 
   const sendChatMessage = async () => {
     if (!chatMessage || !activeWorkspace) return;
@@ -252,6 +317,57 @@ function Dashboard({ userId }) {
                 style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
               />
               <button onClick={createTask} style={{ width: '100%', marginTop: 5 }}>Create Task</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeWorkspace && (
+        <div style={{ minWidth: 250 }}>
+          <h3>Members</h3>
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {members.map((m) => (
+              <li key={m.user_id} style={{ marginBottom: 8 }}>
+                <div>{m.name} <em>({m.email})</em></div>
+                {currentUserRole === 'Admin' ? (
+                  <div style={{ display: 'flex', gap: 5, marginTop: 3 }}>
+                    <select
+                      value={m.role_name}
+                      onChange={(e) => updateMemberRole(m.user_id, e.target.value)}
+                      style={{ backgroundColor: 'white', color: 'black' }}
+                    >
+                      <option value="Admin">Admin</option>
+                      <option value="Editor">Editor</option>
+                      <option value="Viewer">Viewer</option>
+                    </select>
+                    <button onClick={() => removeMember(m.user_id)}>Remove</button>
+                  </div>
+                ) : (
+                  <div>{m.role_name}</div>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {currentUserRole === 'Admin' && (
+            <div style={{ marginTop: 10 }}>
+              <input
+                placeholder="User email"
+                value={newMemberEmail}
+                onChange={(e) => setNewMemberEmail(e.target.value)}
+                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
+              />
+              <select
+                value={newMemberRole}
+                onChange={(e) => setNewMemberRole(e.target.value)}
+                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
+              >
+                <option value="Admin">Admin</option>
+                <option value="Editor">Editor</option>
+                <option value="Viewer">Viewer</option>
+              </select>
+              <button onClick={addMember} style={{ width: '100%' }}>Add Member</button>
+              {memberError && <p style={{ color: 'red' }}>{memberError}</p>}
             </div>
           )}
         </div>

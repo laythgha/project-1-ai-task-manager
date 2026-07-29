@@ -254,6 +254,95 @@ app.get('/workspaces/:workspace_id/projects', async (req, res) => {
   res.send(projects);
 });
 
+app.get('/workspaces/:workspace_id/members', async (req, res) => {
+  const workspace_id = parseInt(req.params.workspace_id);
+  const memberships = await prisma.workspaceMembership.findMany({
+    where: { workspace_id },
+    include: { user: true, role: true }
+  });
+  const members = memberships.map((m) => ({
+    user_id: m.user_id,
+    name: m.user.name,
+    email: m.user.email,
+    role_name: m.role.role_name
+  }));
+  res.send(members);
+});
+
+app.post('/workspaces/:workspace_id/members', async (req, res) => {
+  const workspace_id = parseInt(req.params.workspace_id);
+  const { email, role_name, user_id } = req.body;
+  const role = await getUserRoleInWorkspace(user_id, workspace_id);
+  if (role !== 'Admin') {
+    return res.status(403).send({ message: 'Only Admins can add members' });
+  }
+  const targetUser = await prisma.users.findUnique({ where: { email } });
+  if (!targetUser) {
+    return res.status(404).send({ message: 'No user found with that email. They need to sign up first.' });
+  }
+  const existingMembership = await prisma.workspaceMembership.findFirst({
+    where: { user_id: targetUser.id, workspace_id }
+  });
+  if (existingMembership) {
+    return res.status(409).send({ message: 'This user is already a member of the workspace' });
+  }
+  const targetRole = await prisma.roles.findFirst({ where: { role_name } });
+  if (!targetRole) {
+    return res.status(400).send({ message: 'Invalid role' });
+  }
+  await prisma.workspaceMembership.create({
+    data: { user_id: targetUser.id, workspace_id, role_id: targetRole.id }
+  });
+  const member = { user_id: targetUser.id, name: targetUser.name, email: targetUser.email, role_name: targetRole.role_name };
+  io.to(`workspace_${workspace_id}`).emit('member_added', member);
+  res.send({ message: 'Member added', member });
+});
+
+app.patch('/workspaces/:workspace_id/members/:user_id', async (req, res) => {
+  const workspace_id = parseInt(req.params.workspace_id);
+  const target_user_id = parseInt(req.params.user_id);
+  const { role_name, user_id } = req.body;
+  const role = await getUserRoleInWorkspace(user_id, workspace_id);
+  if (role !== 'Admin') {
+    return res.status(403).send({ message: 'Only Admins can change member roles' });
+  }
+  const targetRole = await prisma.roles.findFirst({ where: { role_name } });
+  if (!targetRole) {
+    return res.status(400).send({ message: 'Invalid role' });
+  }
+  const membership = await prisma.workspaceMembership.findFirst({
+    where: { user_id: target_user_id, workspace_id }
+  });
+  if (!membership) {
+    return res.status(404).send({ message: 'Member not found in this workspace' });
+  }
+  await prisma.workspaceMembership.update({
+    where: { id: membership.id },
+    data: { role_id: targetRole.id }
+  });
+  io.to(`workspace_${workspace_id}`).emit('member_updated', { user_id: target_user_id, role_name: targetRole.role_name });
+  res.send({ message: 'Member role updated' });
+});
+
+app.delete('/workspaces/:workspace_id/members/:user_id', async (req, res) => {
+  const workspace_id = parseInt(req.params.workspace_id);
+  const target_user_id = parseInt(req.params.user_id);
+  const { user_id } = req.body;
+  const role = await getUserRoleInWorkspace(user_id, workspace_id);
+  if (role !== 'Admin') {
+    return res.status(403).send({ message: 'Only Admins can remove members' });
+  }
+  const membership = await prisma.workspaceMembership.findFirst({
+    where: { user_id: target_user_id, workspace_id }
+  });
+  if (!membership) {
+    return res.status(404).send({ message: 'Member not found in this workspace' });
+  }
+  await prisma.workspaceMembership.delete({ where: { id: membership.id } });
+  io.to(`workspace_${workspace_id}`).emit('member_removed', { user_id: target_user_id });
+  res.send({ message: 'Member removed' });
+});
+
 
 app.get('/users/:user_id/workspaces', async (req, res) => {
   const user_id = parseInt(req.params.user_id);
