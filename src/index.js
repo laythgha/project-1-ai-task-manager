@@ -24,21 +24,23 @@ app.use(cors({
 const http = require('http');
 const { Server } = require('socket.io');
 const nodemailer = require('nodemailer');
-setInterval(async () => {
-  const now = new Date();
+if (require.main === module) {
+  setInterval(async () => {
+    const now = new Date();
 
-  const dueReminders = await prisma.reminders.findMany({
-    where: {
-      reminder_date: { lte: now },
-      sent: false
+    const dueReminders = await prisma.reminders.findMany({
+      where: {
+        reminder_date: { lte: now },
+        sent: false
+      }
+    });
+
+    for (const reminder of dueReminders) {
+      await sendReminderEmail(reminder);
+      console.log(`Sent reminder email for reminder ${reminder.id}`);
     }
-  });
-
-  for (const reminder of dueReminders) {
-    await sendReminderEmail(reminder);
-    console.log(`Sent reminder email for reminder ${reminder.id}`);
-  }
-}, 60000);
+  }, 60000);
+}
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -619,6 +621,10 @@ app.get('/auth/google/callback',
     res.redirect(`${process.env.FRONTEND_URL}?token=${token}`);
   }
 );
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

@@ -1,0 +1,21 @@
+{
+  "name": "ai-task-manager-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Root-level test runner for the AI Task Manager. App code lives in src/ and frontend/.",
+  "scripts": {
+    "test": "jest",
+    "test:setup": "node src/scripts/setup-test-db.js"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["<rootDir>/tests/**/*.test.js"],
+    "setupFiles": ["<rootDir>/tests/jest.setup.js"],
+    "testTimeout": 15000,
+    "forceExit": true
+  }
+}
