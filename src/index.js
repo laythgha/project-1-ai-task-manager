@@ -156,11 +156,16 @@ async function sendReminderEmail(reminder) {
     }
   });
 
-  const membership = await prisma.workspaceMembership.findFirst({
-    where: { workspace_id: task.project.workspace_id }
-  });
+  if (!reminder.user_id) {
+    console.log(`Reminder ${reminder.id} has no recipient, skipping email`);
+    await prisma.reminders.update({
+      where: { id: reminder.id },
+      data: { sent: true }
+    });
+    return;
+  }
 
-  const user = await prisma.users.findUnique({ where: { id: membership.user_id } });
+  const user = await prisma.users.findUnique({ where: { id: reminder.user_id } });
 
   await transporter.sendMail({
     from: process.env.GMAIL_USER,
@@ -420,14 +425,19 @@ app.patch('/tasks/:id', async (req, res) => {
   res.send({ message: 'Task updated', task });
 });
 app.post('/reminders', async (req, res) => {
-  const { task_id, remind_at, user_id, workspace_id } = req.body;
+  const { task_id, remind_at, user_id, recipient_id, workspace_id } = req.body;
   const role = await getUserRoleInWorkspace(user_id, workspace_id);
   if (role !== 'Admin' && role !== 'Editor') {
     return res.status(403).send({ message: 'Only Admins and Editors can create reminders' });
   }
+  const recipientRole = await getUserRoleInWorkspace(recipient_id, workspace_id);
+  if (!recipientRole) {
+    return res.status(400).send({ message: 'Selected recipient is not a member of this workspace' });
+  }
   const reminder = await prisma.reminders.create({
     data: {
       task_id,
+      user_id: recipient_id,
       reminder_date: new Date(remind_at),
       sent: false
     }
@@ -507,6 +517,7 @@ app.post('/chat', async (req, res) => {
     const reminder = await prisma.reminders.create({
       data: {
         task_id: toolUse.input.task_id,
+        user_id: user_id,
         reminder_date: new Date(toolUse.input.remind_at),
         sent: false
       }

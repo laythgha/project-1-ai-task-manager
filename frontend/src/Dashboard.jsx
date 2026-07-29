@@ -28,6 +28,10 @@ function Dashboard({ userId }) {
   const [newMemberRole, setNewMemberRole] = useState('Viewer');
   const [memberError, setMemberError] = useState('');
 
+  const [reminderInputs, setReminderInputs] = useState({});
+  const [reminderRecipients, setReminderRecipients] = useState({});
+  const [reminderStatus, setReminderStatus] = useState({});
+
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
@@ -185,6 +189,26 @@ function Dashboard({ userId }) {
     }
   };
 
+  const setReminder = async (taskId) => {
+    const remind_at = reminderInputs[taskId];
+    if (!remind_at) return;
+    const recipient_id = reminderRecipients[taskId] || userId;
+    setReminderStatus((prev) => ({ ...prev, [taskId]: '' }));
+    try {
+      await api.post('/reminders', {
+        task_id: taskId,
+        remind_at: new Date(remind_at).toISOString(),
+        user_id: userId,
+        recipient_id,
+        workspace_id: activeWorkspace.id,
+      });
+      setReminderStatus((prev) => ({ ...prev, [taskId]: 'Reminder set.' }));
+      setReminderInputs((prev) => ({ ...prev, [taskId]: '' }));
+    } catch (err) {
+      setReminderStatus((prev) => ({ ...prev, [taskId]: err.response?.data?.message || 'Something went wrong' }));
+    }
+  };
+
   const sendChatMessage = async () => {
     if (!chatMessage || !activeWorkspace) return;
     const userMsg = chatMessage;
@@ -268,6 +292,25 @@ function Dashboard({ userId }) {
                     <strong>{t.task_name}</strong> <em>({t.status}, {t.priority})</em>
                     {t.description && <div style={{ fontSize: 12 }}>{t.description}</div>}
                     {t.due_date && <div style={{ fontSize: 12 }}>Due: {new Date(t.due_date).toLocaleDateString()}</div>}
+                    <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
+                      <input
+                        type="datetime-local"
+                        value={reminderInputs[t.id] || ''}
+                        onChange={(e) => setReminderInputs((prev) => ({ ...prev, [t.id]: e.target.value }))}
+                        style={{ backgroundColor: 'white', color: 'black', fontSize: 12 }}
+                      />
+                      <select
+                        value={reminderRecipients[t.id] || userId}
+                        onChange={(e) => setReminderRecipients((prev) => ({ ...prev, [t.id]: parseInt(e.target.value) }))}
+                        style={{ backgroundColor: 'white', color: 'black', fontSize: 12 }}
+                      >
+                        {members.map((m) => (
+                          <option key={m.user_id} value={m.user_id}>{m.name}</option>
+                        ))}
+                      </select>
+                      <button onClick={() => setReminder(t.id)} style={{ fontSize: 12 }}>Remind me</button>
+                    </div>
+                    {reminderStatus[t.id] && <div style={{ fontSize: 12, color: reminderStatus[t.id] === 'Reminder set.' ? 'green' : 'red' }}>{reminderStatus[t.id]}</div>}
                   </li>
                 ))}
               </ul>

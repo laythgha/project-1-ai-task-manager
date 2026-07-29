@@ -36,6 +36,7 @@ model Users {
 	signin_method String
 	workspace_membership WorkspaceMembership[]
 	assigned_tasks Tasks[]
+	reminders Reminders[]
 }
 
 model Projects {
@@ -77,8 +78,10 @@ model WorkspaceMembership {
 model Reminders {
 	id Int @id @default(autoincrement())
 	task_id Int
+	user_id Int?
 	reminder_date DateTime
 	sent Boolean
 	task Tasks @relation(fields: [task_id], references: [id], onDelete: Cascade)
+	user Users? @relation(fields: [user_id], references: [id], onDelete: SetNull)
 
 }
