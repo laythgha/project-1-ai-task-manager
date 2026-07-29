@@ -13,6 +13,12 @@ function Dashboard({ userId }) {
 
   const [tasks, setTasks] = useState([]);
   const [newTaskName, setNewTaskName] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
+  const [newTaskStatus, setNewTaskStatus] = useState('To Do');
+  const [newTaskPriority, setNewTaskPriority] = useState('Medium');
+  const [newTaskDueDate, setNewTaskDueDate] = useState('');
+  const [newTaskHours, setNewTaskHours] = useState('');  
+
 
   const [chatMessage, setChatMessage] = useState('');
   const [chatLog, setChatLog] = useState([]);
@@ -89,15 +95,25 @@ function Dashboard({ userId }) {
   };
 
   const createTask = async () => {
-    if (!newTaskName || !activeProject) return;
-    await api.post('/tasks', {
-      task_name: newTaskName,
-      project_id: activeProject.id,
-      user_id: userId,
-      workspace_id: activeWorkspace.id,
-    });
-    setNewTaskName('');
-  };
+  if (!newTaskName || !activeProject) return;
+  await api.post('/tasks', {
+    task_name: newTaskName,
+    description: newTaskDescription,
+    status: newTaskStatus,
+    priority: newTaskPriority,
+    due_date: newTaskDueDate || undefined,
+    estimated_hours: newTaskHours ? parseFloat(newTaskHours) : undefined,
+    project_id: activeProject.id,
+    user_id: userId,
+    workspace_id: activeWorkspace.id,
+  });
+  setNewTaskName('');
+  setNewTaskDescription('');
+  setNewTaskStatus('To Do');
+  setNewTaskPriority('Medium');
+  setNewTaskDueDate('');
+  setNewTaskHours('');
+};
 
   const sendChatMessage = async () => {
     if (!chatMessage || !activeWorkspace) return;
@@ -178,16 +194,57 @@ function Dashboard({ userId }) {
               <h4>Tasks in {activeProject.project_name}</h4>
               <ul style={{ listStyle: 'none', padding: 0 }}>
                 {tasks.map((t) => (
-                  <li key={t.id}>
-                    {t.task_name} <em>({t.priority})</em>
+                  <li key={t.id} style={{ marginBottom: 10, borderBottom: '1px solid #ccc', paddingBottom: 5 }}>
+                    <strong>{t.task_name}</strong> <em>({t.status}, {t.priority})</em>
+                    {t.description && <div style={{ fontSize: 12 }}>{t.description}</div>}
+                    {t.due_date && <div style={{ fontSize: 12 }}>Due: {new Date(t.due_date).toLocaleDateString()}</div>}
                   </li>
                 ))}
               </ul>
+
               <input
-                placeholder="New task name"
+                placeholder="Task name"
                 value={newTaskName}
                 onChange={(e) => setNewTaskName(e.target.value)}
-                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%' }}
+                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
+              />
+              <textarea
+                placeholder="Description"
+                value={newTaskDescription}
+                onChange={(e) => setNewTaskDescription(e.target.value)}
+                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
+              />
+              <select
+                value={newTaskStatus}
+                onChange={(e) => setNewTaskStatus(e.target.value)}
+                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
+              >
+                <option value="To Do">To Do</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Done">Done</option>
+              </select>
+              <select
+                value={newTaskPriority}
+                onChange={(e) => setNewTaskPriority(e.target.value)}
+                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+              <input
+                type="date"
+                value={newTaskDueDate}
+                onChange={(e) => setNewTaskDueDate(e.target.value)}
+                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
+              />
+              <input
+                type="number"
+                step="0.5"
+                placeholder="Estimated hours"
+                value={newTaskHours}
+                onChange={(e) => setNewTaskHours(e.target.value)}
+                style={{ backgroundColor: 'white', color: 'black', padding: 6, width: '100%', marginBottom: 5 }}
               />
               <button onClick={createTask} style={{ width: '100%', marginTop: 5 }}>Create Task</button>
             </div>
