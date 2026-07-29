@@ -35,6 +35,7 @@ model Users {
 	password_hashed String
 	signin_method String
 	workspace_membership WorkspaceMembership[]
+	assigned_tasks Tasks[]
 }
 
 model Projects {
@@ -51,10 +52,15 @@ model Tasks {
 	id Int @id @default(autoincrement())
 	project_id Int
 	task_name String
+	description String?
+	status String @default("To Do")
 	priority String @default("Medium")
+	due_date DateTime?
+	assignee_id Int?
+	estimated_hours Float?
 	reminders Reminders[]
 	project Projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
-
+	assignee Users? @relation(fields: [assignee_id], references: [id])
 }
 
 model WorkspaceMembership {

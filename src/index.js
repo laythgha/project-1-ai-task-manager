@@ -256,16 +256,32 @@ app.get('/users/:user_id/workspaces', async (req, res) => {
 
   res.send(workspaces);
 });
+
+
 app.post('/tasks', async (req, res) => {
-  const { task_name, project_id, user_id, workspace_id } = req.body;
+  const { task_name, description, status, priority, due_date, assignee_id, estimated_hours, project_id, user_id, workspace_id } = req.body;
+
   const role = await getUserRoleInWorkspace(user_id, workspace_id);
+
   if (role !== 'Admin' && role !== 'Editor') {
     return res.status(403).send({ message: 'Only Admins and Editors can create tasks' });
   }
+
   const task = await prisma.tasks.create({
-    data: { task_name, project_id }
+    data: {
+      task_name,
+      project_id,
+      description,
+      status,
+      priority,
+      due_date: due_date ? new Date(due_date) : undefined,
+      assignee_id,
+      estimated_hours
+    }
   });
-io.to(`workspace_${workspace_id}`).emit('task_created', task);
+
+  io.to(`workspace_${workspace_id}`).emit('task_created', task);
+
   res.send({ message: 'Task created', taskId: task.id });
 });
 
@@ -276,10 +292,9 @@ app.get('/projects/:project_id/tasks', async (req, res) => {
   });
   res.send(tasks);
 });
-
 app.patch('/tasks/:id', async (req, res) => {
   const task_id = parseInt(req.params.id);
-  const { task_name, priority, user_id, workspace_id } = req.body;
+  const { task_name, description, status, priority, due_date, assignee_id, estimated_hours, user_id, workspace_id } = req.body;
 
   const role = await getUserRoleInWorkspace(user_id, workspace_id);
 
@@ -289,14 +304,21 @@ app.patch('/tasks/:id', async (req, res) => {
 
   const task = await prisma.tasks.update({
     where: { id: task_id },
-    data: { task_name, priority }
+    data: {
+      task_name,
+      description,
+      status,
+      priority,
+      due_date: due_date ? new Date(due_date) : undefined,
+      assignee_id,
+      estimated_hours
+    }
   });
 
   io.to(`workspace_${workspace_id}`).emit('task_updated', task);
 
   res.send({ message: 'Task updated', task });
 });
-
 app.post('/reminders', async (req, res) => {
   const { task_id, remind_at, user_id, workspace_id } = req.body;
   const role = await getUserRoleInWorkspace(user_id, workspace_id);
