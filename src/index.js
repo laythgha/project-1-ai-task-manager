@@ -397,6 +397,19 @@ app.get('/projects/:project_id/tasks', async (req, res) => {
   });
   res.send(tasks);
 });
+
+app.delete('/projects/:id', async (req, res) => {
+  const project_id = parseInt(req.params.id);
+  const { user_id, workspace_id } = req.body;
+  const role = await getUserRoleInWorkspace(user_id, workspace_id);
+  if (role !== 'Admin' && role !== 'Editor') {
+    return res.status(403).send({ message: 'Only Admins and Editors can delete projects' });
+  }
+  await prisma.projects.delete({ where: { id: project_id } });
+  io.to(`workspace_${workspace_id}`).emit('project_deleted', { id: project_id });
+  res.send({ message: 'Project deleted' });
+});
+
 app.patch('/tasks/:id', async (req, res) => {
   const task_id = parseInt(req.params.id);
   const { task_name, description, status, priority, due_date, assignee_id, estimated_hours, user_id, workspace_id } = req.body;
@@ -424,6 +437,19 @@ app.patch('/tasks/:id', async (req, res) => {
 
   res.send({ message: 'Task updated', task });
 });
+
+app.delete('/tasks/:id', async (req, res) => {
+  const task_id = parseInt(req.params.id);
+  const { user_id, workspace_id } = req.body;
+  const role = await getUserRoleInWorkspace(user_id, workspace_id);
+  if (role !== 'Admin' && role !== 'Editor') {
+    return res.status(403).send({ message: 'Only Admins and Editors can delete tasks' });
+  }
+  await prisma.tasks.delete({ where: { id: task_id } });
+  io.to(`workspace_${workspace_id}`).emit('task_deleted', { id: task_id });
+  res.send({ message: 'Task deleted' });
+});
+
 app.post('/reminders', async (req, res) => {
   const { task_id, remind_at, user_id, recipient_id, workspace_id } = req.body;
   const role = await getUserRoleInWorkspace(user_id, workspace_id);
@@ -537,6 +563,7 @@ app.delete('/workspaces/:id', async (req, res) => {
     return res.status(403).send({ message: 'Only Admins can delete a workspace' });
   }
   await prisma.workspaces.delete({ where: { id: workspace_id } });
+  io.to(`workspace_${workspace_id}`).emit('workspace_deleted', { id: workspace_id });
   res.send({ message: 'Workspace deleted' });
 });
 

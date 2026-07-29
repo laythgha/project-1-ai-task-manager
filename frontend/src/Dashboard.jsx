@@ -6,10 +6,12 @@ function Dashboard({ userId }) {
   const [workspaces, setWorkspaces] = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const [workspaceError, setWorkspaceError] = useState('');
 
   const [projects, setProjects] = useState([]);
   const [activeProject, setActiveProject] = useState(null);
   const [newProjectName, setNewProjectName] = useState('');
+  const [projectError, setProjectError] = useState('');
 
   const [tasks, setTasks] = useState([]);
   const [newTaskName, setNewTaskName] = useState('');
@@ -71,6 +73,14 @@ function Dashboard({ userId }) {
     const handleMemberRemoved = ({ user_id }) => {
       setMembers((prev) => prev.filter((m) => m.user_id !== user_id));
     };
+    const handleProjectDeleted = ({ id }) => {
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      setActiveProject((prev) => (prev?.id === id ? null : prev));
+    };
+    const handleWorkspaceDeleted = ({ id }) => {
+      setWorkspaces((prev) => prev.filter((w) => w.id !== id));
+      setActiveWorkspace((prev) => (prev?.id === id ? null : prev));
+    };
 
     socket.on('task_created', handleTaskCreated);
     socket.on('task_updated', handleTaskUpdated);
@@ -78,6 +88,8 @@ function Dashboard({ userId }) {
     socket.on('member_added', handleMemberAdded);
     socket.on('member_updated', handleMemberUpdated);
     socket.on('member_removed', handleMemberRemoved);
+    socket.on('project_deleted', handleProjectDeleted);
+    socket.on('workspace_deleted', handleWorkspaceDeleted);
 
     return () => {
       socket.off('task_created', handleTaskCreated);
@@ -86,6 +98,8 @@ function Dashboard({ userId }) {
       socket.off('member_added', handleMemberAdded);
       socket.off('member_updated', handleMemberUpdated);
       socket.off('member_removed', handleMemberRemoved);
+      socket.off('project_deleted', handleProjectDeleted);
+      socket.off('workspace_deleted', handleWorkspaceDeleted);
     };
   }, [socket, activeWorkspace, activeProject]);
 
@@ -147,6 +161,40 @@ function Dashboard({ userId }) {
   setNewTaskDueDate('');
   setNewTaskHours('');
 };
+
+  const deleteWorkspace = async (workspaceId) => {
+    if (!window.confirm('Delete this workspace? This also deletes all its projects and tasks.')) return;
+    setWorkspaceError('');
+    try {
+      await api.delete(`/workspaces/${workspaceId}`, { data: { user_id: userId } });
+      setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+      if (activeWorkspace?.id === workspaceId) setActiveWorkspace(null);
+    } catch (err) {
+      setWorkspaceError(err.response?.data?.message || 'Something went wrong');
+    }
+  };
+
+  const deleteProject = async (projectId) => {
+    if (!window.confirm('Delete this project? This also deletes all its tasks.')) return;
+    setProjectError('');
+    try {
+      await api.delete(`/projects/${projectId}`, { data: { user_id: userId, workspace_id: activeWorkspace.id } });
+      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+      if (activeProject?.id === projectId) setActiveProject(null);
+    } catch (err) {
+      setProjectError(err.response?.data?.message || 'Something went wrong');
+    }
+  };
+
+  const deleteTask = async (taskId) => {
+    if (!window.confirm('Delete this task?')) return;
+    try {
+      await api.delete(`/tasks/${taskId}`, { data: { user_id: userId, workspace_id: activeWorkspace.id } });
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    } catch (err) {
+      setReminderStatus((prev) => ({ ...prev, [taskId]: err.response?.data?.message || 'Something went wrong' }));
+    }
+  };
 
   const currentUserRole = members.find((m) => m.user_id === userId)?.role_name;
 
@@ -229,22 +277,23 @@ function Dashboard({ userId }) {
         <h3>Workspaces</h3>
         <ul style={{ listStyle: 'none', padding: 0 }}>
           {workspaces.map((w) => (
-            <li key={w.id}>
+            <li key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
               <button
                 onClick={() => setActiveWorkspace(w)}
                 style={{
                   fontWeight: activeWorkspace?.id === w.id ? 'bold' : 'normal',
                   display: 'block',
-                  marginBottom: 5,
-                  width: '100%',
+                  flex: 1,
                   textAlign: 'left',
                 }}
               >
                 {w.workspace_name}
               </button>
+              <button onClick={() => deleteWorkspace(w.id)} style={{ fontSize: 12 }}>Delete</button>
             </li>
           ))}
         </ul>
+        {workspaceError && <p style={{ color: 'red' }}>{workspaceError}</p>}
         <input
           placeholder="New workspace name"
           value={newWorkspaceName}
@@ -259,22 +308,23 @@ function Dashboard({ userId }) {
           <h3>Projects in {activeWorkspace.workspace_name}</h3>
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {projects.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
                 <button
                   onClick={() => setActiveProject(p)}
                   style={{
                     fontWeight: activeProject?.id === p.id ? 'bold' : 'normal',
                     display: 'block',
-                    marginBottom: 5,
-                    width: '100%',
+                    flex: 1,
                     textAlign: 'left',
                   }}
                 >
                   {p.project_name}
                 </button>
+                <button onClick={() => deleteProject(p.id)} style={{ fontSize: 12 }}>Delete</button>
               </li>
             ))}
           </ul>
+          {projectError && <p style={{ color: 'red' }}>{projectError}</p>}
           <input
             placeholder="New project name"
             value={newProjectName}
@@ -309,6 +359,7 @@ function Dashboard({ userId }) {
                         ))}
                       </select>
                       <button onClick={() => setReminder(t.id)} style={{ fontSize: 12 }}>Remind me</button>
+                      <button onClick={() => deleteTask(t.id)} style={{ fontSize: 12 }}>Delete</button>
                     </div>
                     {reminderStatus[t.id] && <div style={{ fontSize: 12, color: reminderStatus[t.id] === 'Reminder set.' ? 'green' : 'red' }}>{reminderStatus[t.id]}</div>}
                   </li>
