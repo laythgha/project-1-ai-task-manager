@@ -81,6 +81,17 @@ const tools = [
       },
       required: ["task_id", "remind_at"]
     }
+  },
+  {
+    name: "delete_task",
+    description: "Delete an existing task",
+    input_schema: {
+      type: "object",
+      properties: {
+        task_id: { type: "integer" }
+      },
+      required: ["task_id"]
+    }
   }
 ];
 
@@ -387,6 +398,17 @@ app.post('/chat', async (req, res) => {
     });
     io.to(`workspace_${workspace_id}`).emit('task_updated', task);
     return res.send({ reply: `Updated task: ${task.task_name} (priority: ${task.priority})` });
+  }
+
+  if (toolUse.name === 'delete_task') {
+    if (role !== 'Admin' && role !== 'Editor') {
+      return res.status(403).send({ message: 'Your role does not allow deleting tasks' });
+    }
+    const task = await prisma.tasks.delete({
+      where: { id: toolUse.input.task_id }
+    });
+    io.to(`workspace_${workspace_id}`).emit('task_deleted', { id: task.id });
+    return res.send({ reply: `Deleted task: ${task.task_name}` });
   }
 
   if (toolUse.name === 'create_reminder') {

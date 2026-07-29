@@ -50,13 +50,18 @@ function Dashboard({ userId }) {
     const handleTaskUpdated = (task) => {
       setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
     };
+    const handleTaskDeleted = ({ id }) => {
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    };
 
     socket.on('task_created', handleTaskCreated);
     socket.on('task_updated', handleTaskUpdated);
+    socket.on('task_deleted', handleTaskDeleted);
 
     return () => {
       socket.off('task_created', handleTaskCreated);
       socket.off('task_updated', handleTaskUpdated);
+      socket.off('task_deleted', handleTaskDeleted);
     };
   }, [socket, activeWorkspace, activeProject]);
 
