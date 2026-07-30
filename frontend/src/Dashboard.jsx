@@ -1,140 +1,32 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import api from './api';
-
-const colors = {
-  bg: '#f4f5f7',
-  panel: '#ffffff',
-  border: '#e2e4e9',
-  text: '#1f2430',
-  muted: '#6b7280',
-  primary: '#4f46e5',
-  primaryText: '#ffffff',
-  danger: '#dc2626',
-  success: '#16a34a',
-};
-
-const styles = {
-  page: {
-    fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
-    backgroundColor: colors.bg,
-    minHeight: '100vh',
-    color: colors.text,
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '14px 24px',
-    backgroundColor: colors.panel,
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  headerTitle: {
-    margin: 0,
-    fontSize: 18,
-    fontWeight: 700,
-  },
-  body: {
-    display: 'flex',
-    gap: 20,
-    padding: 24,
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-  },
-  panel: {
-    backgroundColor: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: 10,
-    padding: 16,
-    boxShadow: '0 1px 2px rgba(16, 24, 40, 0.04)',
-  },
-  panelTitle: {
-    margin: '0 0 12px 0',
-    fontSize: 14,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    color: colors.muted,
-  },
-  list: { listStyle: 'none', padding: 0, margin: '0 0 12px 0' },
-  listItem: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 },
-  itemButton: (active) => ({
-    flex: 1,
-    textAlign: 'left',
-    padding: '8px 10px',
-    borderRadius: 6,
-    border: 'none',
-    backgroundColor: active ? colors.primary : 'transparent',
-    color: active ? colors.primaryText : colors.text,
-    fontWeight: active ? 600 : 400,
-    cursor: 'pointer',
-  }),
-  input: {
-    backgroundColor: '#fff',
-    color: colors.text,
-    padding: 8,
-    width: '100%',
-    marginBottom: 6,
-    border: `1px solid ${colors.border}`,
-    borderRadius: 6,
-    boxSizing: 'border-box',
-  },
-  select: {
-    backgroundColor: '#fff',
-    color: colors.text,
-    padding: 8,
-    border: `1px solid ${colors.border}`,
-    borderRadius: 6,
-  },
-  button: {
-    padding: '8px 12px',
-    borderRadius: 6,
-    border: `1px solid ${colors.border}`,
-    backgroundColor: '#fff',
-    color: colors.text,
-    cursor: 'pointer',
-  },
-  buttonPrimary: {
-    padding: '8px 12px',
-    borderRadius: 6,
-    border: 'none',
-    backgroundColor: colors.primary,
-    color: colors.primaryText,
-    cursor: 'pointer',
-    fontWeight: 600,
-    width: '100%',
-    marginTop: 4,
-  },
-  buttonSmall: {
-    fontSize: 12,
-    padding: '4px 8px',
-    borderRadius: 5,
-    border: `1px solid ${colors.border}`,
-    backgroundColor: '#fff',
-    cursor: 'pointer',
-  },
-  taskCard: {
-    marginBottom: 10,
-    padding: 10,
-    borderRadius: 8,
-    border: `1px solid ${colors.border}`,
-    backgroundColor: '#fafbfc',
-  },
-  badge: {
-    display: 'inline-block',
-    fontSize: 11,
-    fontWeight: 600,
-    padding: '2px 8px',
-    borderRadius: 999,
-    backgroundColor: '#eef0ff',
-    color: colors.primary,
-    marginLeft: 6,
-  },
-  errorText: { color: colors.danger, fontSize: 13, margin: '4px 0' },
-  statusText: (ok) => ({ fontSize: 12, color: ok ? colors.success : colors.danger, marginTop: 4 }),
-};
+import './Dashboard.css';
 
 const ROLE_OPTIONS = ['Owner', 'Admin', 'Member', 'Viewer'];
+
+const STATUS_COLUMNS = [
+  { key: 'To Do', label: 'To Do', dot: 'dot-todo' },
+  { key: 'In Progress', label: 'In Progress', dot: 'dot-progress' },
+  { key: 'Done', label: 'Done', dot: 'dot-done' },
+];
+
+const initials = (name) => {
+  if (!name) return '?';
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join('');
+};
+
+const priorityClass = (priority) => {
+  const p = (priority || '').toLowerCase();
+  if (p === 'high') return 'high';
+  if (p === 'low') return 'low';
+  return 'medium';
+};
 
 function Dashboard({ userId, onLogout }) {
   const [workspaces, setWorkspaces] = useState([]);
@@ -178,7 +70,7 @@ function Dashboard({ userId, onLogout }) {
   }, [userId]);
 
   useEffect(() => {
-    const s = io(import.meta.env.VITE_API_URL);
+    const s = io(import.meta.env.VITE_API_URL || 'http://localhost:3000');
     setSocket(s);
     return () => s.disconnect();
   }, []);
@@ -352,8 +244,13 @@ function Dashboard({ userId, onLogout }) {
   };
 
   const currentUserRole = members.find((m) => m.user_id === userId)?.role_name;
-  const canManageMembers = currentUserRole === 'Owner' || currentUserRole === 'Admin';
+  const isOwnerOrAdmin = currentUserRole === 'Owner' || currentUserRole === 'Admin';
+  const canManageMembers = isOwnerOrAdmin;
   const canRemoveMembers = currentUserRole === 'Owner';
+  const canRenameWorkspace = isOwnerOrAdmin;
+  const canManageProjects = currentUserRole && currentUserRole !== 'Viewer';
+  const canDeleteProjects = isOwnerOrAdmin;
+  const canManageTasks = currentUserRole && currentUserRole !== 'Viewer';
 
   const addMember = async () => {
     if (!newMemberEmail || !activeWorkspace) return;
@@ -416,6 +313,7 @@ function Dashboard({ userId, onLogout }) {
       const res = await api.post('/chat', {
         message: userMsg,
         workspace_id: activeWorkspace.id,
+        history: chatLog,
       });
       setChatLog((prev) => [...prev, { from: 'ai', text: res.data.reply }]);
     } catch (err) {
@@ -423,236 +321,331 @@ function Dashboard({ userId, onLogout }) {
     }
   };
 
+  const currentUserName = members.find((m) => m.user_id === userId)?.name;
+
   return (
-    <div style={styles.page}>
-      <div style={styles.header}>
-        <h1 style={styles.headerTitle}>AI Task Manager</h1>
-        <button style={styles.button} onClick={onLogout}>Log Out</button>
+    <div className="app-shell">
+      <div className="app-navbar">
+        <div className="app-brand">
+          <span className="app-brand-mark">✦</span>
+          AI Task Manager
+        </div>
+        <div className="app-navbar-right">
+          {currentUserName && (
+            <div className="app-user">
+              <span className="avatar">{initials(currentUserName)}</span>
+            </div>
+          )}
+          <button className="btn-outline-sm" onClick={onLogout} title="Log out">Log Out</button>
+        </div>
       </div>
 
-      <div style={styles.body}>
-        <div style={{ ...styles.panel, minWidth: 220 }}>
-          <h3 style={styles.panelTitle}>Workspaces</h3>
-          <ul style={styles.list}>
-            {workspaces.map((w) => (
-              <li key={w.id} style={styles.listItem}>
-                <button style={styles.itemButton(activeWorkspace?.id === w.id)} onClick={() => setActiveWorkspace(w)}>
-                  {w.workspace_name}
-                </button>
-                <button style={styles.buttonSmall} onClick={() => deleteWorkspace(w.id)}>Delete</button>
-              </li>
-            ))}
-          </ul>
-          {workspaceError && <p style={styles.errorText}>{workspaceError}</p>}
-          <input
-            placeholder="New workspace name"
-            value={newWorkspaceName}
-            onChange={(e) => setNewWorkspaceName(e.target.value)}
-            style={styles.input}
-          />
-          <button style={styles.buttonPrimary} onClick={createWorkspace}>Create Workspace</button>
-        </div>
-
-        {activeWorkspace && (
-          <div style={{ ...styles.panel, minWidth: 260 }}>
-            {renamingWorkspace ? (
-              <div style={{ marginBottom: 12 }}>
-                <input
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  style={styles.input}
-                />
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button style={styles.buttonSmall} onClick={renameWorkspace}>Save</button>
-                  <button style={styles.buttonSmall} onClick={() => setRenamingWorkspace(false)}>Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <h3 style={styles.panelTitle}>
-                Projects in {activeWorkspace.workspace_name}{' '}
-                <button
-                  style={{ ...styles.buttonSmall, textTransform: 'none', fontWeight: 400 }}
-                  onClick={() => { setRenameValue(activeWorkspace.workspace_name); setRenamingWorkspace(true); }}
-                >
-                  Rename
-                </button>
-              </h3>
-            )}
-            <ul style={styles.list}>
-              {projects.map((p) => (
-                <li key={p.id} style={styles.listItem}>
-                  <button style={styles.itemButton(activeProject?.id === p.id)} onClick={() => setActiveProject(p)}>
-                    {p.project_name}
+      <div className="app-body">
+        <div className="col-nav">
+          <div className="panel">
+            <h3 className="panel-title">Workspaces</h3>
+            {workspaces.length === 0 && <div className="nav-list-empty">No workspaces yet.</div>}
+            <ul className="nav-list">
+              {workspaces.map((w) => (
+                <li key={w.id} className="nav-item">
+                  <button
+                    className={`nav-item-btn${activeWorkspace?.id === w.id ? ' active' : ''}`}
+                    onClick={() => setActiveWorkspace(w)}
+                  >
+                    {w.workspace_name}
                   </button>
-                  <button style={styles.buttonSmall} onClick={() => deleteProject(p.id)}>Delete</button>
-                </li>
-              ))}
-            </ul>
-            {projectError && <p style={styles.errorText}>{projectError}</p>}
-            <input
-              placeholder="New project name"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              style={styles.input}
-            />
-            <button style={styles.buttonPrimary} onClick={createProject}>Create Project</button>
-
-            {activeProject && (
-              <div style={{ marginTop: 24 }}>
-                <h4 style={styles.panelTitle}>Tasks in {activeProject.project_name}</h4>
-                <ul style={styles.list}>
-                  {tasks.map((t) => (
-                    <li key={t.id} style={styles.taskCard}>
-                      <div>
-                        <strong>{t.task_name}</strong>
-                        <span style={styles.badge}>{t.status}</span>
-                        <span style={styles.badge}>{t.priority}</span>
-                      </div>
-                      {t.description && <div style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}>{t.description}</div>}
-                      {t.due_date && <div style={{ fontSize: 12, color: colors.muted }}>Due: {new Date(t.due_date).toLocaleDateString()}</div>}
-                      <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
-                        <input
-                          type="datetime-local"
-                          value={reminderInputs[t.id] || ''}
-                          onChange={(e) => setReminderInputs((prev) => ({ ...prev, [t.id]: e.target.value }))}
-                          style={{ ...styles.select, fontSize: 12 }}
-                        />
-                        <select
-                          value={reminderRecipients[t.id] || userId}
-                          onChange={(e) => setReminderRecipients((prev) => ({ ...prev, [t.id]: parseInt(e.target.value) }))}
-                          style={{ ...styles.select, fontSize: 12 }}
-                        >
-                          {members.map((m) => (
-                            <option key={m.user_id} value={m.user_id}>{m.name}</option>
-                          ))}
-                        </select>
-                        <button style={styles.buttonSmall} onClick={() => setReminder(t.id)}>Remind me</button>
-                        <button style={styles.buttonSmall} onClick={() => deleteTask(t.id)}>Delete</button>
-                      </div>
-                      {reminderStatus[t.id] && (
-                        <div style={styles.statusText(reminderStatus[t.id] === 'Reminder set.')}>{reminderStatus[t.id]}</div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-
-                <input
-                  placeholder="Task name"
-                  value={newTaskName}
-                  onChange={(e) => setNewTaskName(e.target.value)}
-                  style={styles.input}
-                />
-                <textarea
-                  placeholder="Description"
-                  value={newTaskDescription}
-                  onChange={(e) => setNewTaskDescription(e.target.value)}
-                  style={styles.input}
-                />
-                <select
-                  value={newTaskStatus}
-                  onChange={(e) => setNewTaskStatus(e.target.value)}
-                  style={{ ...styles.select, width: '100%', marginBottom: 6, boxSizing: 'border-box' }}
-                >
-                  <option value="To Do">To Do</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Done">Done</option>
-                </select>
-                <select
-                  value={newTaskPriority}
-                  onChange={(e) => setNewTaskPriority(e.target.value)}
-                  style={{ ...styles.select, width: '100%', marginBottom: 6, boxSizing: 'border-box' }}
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
-                <input
-                  type="date"
-                  value={newTaskDueDate}
-                  onChange={(e) => setNewTaskDueDate(e.target.value)}
-                  style={styles.input}
-                />
-                <input
-                  type="number"
-                  step="0.5"
-                  placeholder="Estimated hours"
-                  value={newTaskHours}
-                  onChange={(e) => setNewTaskHours(e.target.value)}
-                  style={styles.input}
-                />
-                <button style={styles.buttonPrimary} onClick={createTask}>Create Task</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeWorkspace && (
-          <div style={{ ...styles.panel, minWidth: 260 }}>
-            <h3 style={styles.panelTitle}>Members {currentUserRole && <span style={styles.badge}>you: {currentUserRole}</span>}</h3>
-            <ul style={styles.list}>
-              {members.map((m) => (
-                <li key={m.user_id} style={{ marginBottom: 10 }}>
-                  <div>{m.name} <span style={{ color: colors.muted, fontSize: 12 }}>({m.email})</span></div>
-                  {canManageMembers ? (
-                    <div style={{ display: 'flex', gap: 5, marginTop: 3 }}>
-                      <select
-                        value={m.role_name}
-                        onChange={(e) => updateMemberRole(m.user_id, e.target.value)}
-                        style={styles.select}
-                      >
-                        {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                      {canRemoveMembers && (
-                        <button style={styles.buttonSmall} onClick={() => removeMember(m.user_id)}>Remove</button>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 13, color: colors.muted }}>{m.role_name}</div>
+                  {w.role_name === 'Owner' && (
+                    <button className="icon-btn" title="Delete workspace" onClick={() => deleteWorkspace(w.id)}>✕</button>
                   )}
                 </li>
               ))}
             </ul>
-
-            {canManageMembers && (
-              <div style={{ marginTop: 10 }}>
-                <input
-                  placeholder="User email"
-                  value={newMemberEmail}
-                  onChange={(e) => setNewMemberEmail(e.target.value)}
-                  style={styles.input}
-                />
-                <select
-                  value={newMemberRole}
-                  onChange={(e) => setNewMemberRole(e.target.value)}
-                  style={{ ...styles.select, width: '100%', marginBottom: 6, boxSizing: 'border-box' }}
-                >
-                  {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-                <button style={styles.buttonPrimary} onClick={addMember}>Add Member</button>
-                {memberError && <p style={styles.errorText}>{memberError}</p>}
-              </div>
-            )}
+            {workspaceError && <p className="error-banner">{workspaceError}</p>}
+            <input
+              placeholder="New workspace name"
+              value={newWorkspaceName}
+              onChange={(e) => setNewWorkspaceName(e.target.value)}
+              className="field-input"
+            />
+            <button className="btn btn-primary btn-full" onClick={createWorkspace}>+ Create Workspace</button>
           </div>
-        )}
+
+          {activeWorkspace && (
+            <div className="panel">
+              {renamingWorkspace ? (
+                <div className="rename-row">
+                  <input
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    className="field-input"
+                    style={{ marginBottom: 0 }}
+                  />
+                  <button className="btn-outline-sm" onClick={renameWorkspace}>Save</button>
+                  <button className="btn-outline-sm" onClick={() => setRenamingWorkspace(false)}>Cancel</button>
+                </div>
+              ) : (
+                <h3 className="panel-title">
+                  Projects
+                  {canRenameWorkspace && (
+                    <button
+                      className="btn-ghost"
+                      onClick={() => { setRenameValue(activeWorkspace.workspace_name); setRenamingWorkspace(true); }}
+                    >
+                      Rename
+                    </button>
+                  )}
+                </h3>
+              )}
+              {projects.length === 0 && <div className="nav-list-empty">No projects yet.</div>}
+              <ul className="nav-list">
+                {projects.map((p) => (
+                  <li key={p.id} className="nav-item">
+                    <button
+                      className={`nav-item-btn${activeProject?.id === p.id ? ' active' : ''}`}
+                      onClick={() => setActiveProject(p)}
+                    >
+                      {p.project_name}
+                    </button>
+                    {canDeleteProjects && (
+                      <button className="icon-btn" title="Delete project" onClick={() => deleteProject(p.id)}>✕</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {projectError && <p className="error-banner">{projectError}</p>}
+              {canManageProjects && (
+                <>
+                  <input
+                    placeholder="New project name"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    className="field-input"
+                  />
+                  <button className="btn btn-primary btn-full" onClick={createProject}>+ Create Project</button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="col-main">
+          {!activeWorkspace && (
+            <div className="panel empty-state">
+              <div className="empty-state-icon">✦</div>
+              <h3>Pick or create a workspace</h3>
+              <p>Choose a workspace on the left to see its projects, or create a new one to get started.</p>
+            </div>
+          )}
+
+          {activeWorkspace && !activeProject && (
+            <div className="panel empty-state">
+              <div className="empty-state-icon">▤</div>
+              <h3>Select a project</h3>
+              <p>Choose a project from the sidebar, or create a new one, to see its task board.</p>
+            </div>
+          )}
+
+          {activeProject && (
+            <div className="panel">
+              <div className="board-header">
+                <h2>{activeProject.project_name}</h2>
+                <span className="chip chip-muted">{tasks.length} task{tasks.length === 1 ? '' : 's'}</span>
+              </div>
+
+              <div className="board" style={{ marginTop: 14 }}>
+                {STATUS_COLUMNS.map((col) => {
+                  const colTasks = tasks.filter((t) => t.status === col.key);
+                  return (
+                    <div className="board-col" key={col.key}>
+                      <div className="board-col-header">
+                        <span className={`board-col-dot ${col.dot}`}></span>
+                        {col.label}
+                        <span className="board-col-count">{colTasks.length}</span>
+                      </div>
+
+                      {colTasks.length === 0 && <div className="board-col-empty">No tasks</div>}
+
+                      {colTasks.map((t) => (
+                        <div className={`task-card priority-${priorityClass(t.priority)}`} key={t.id}>
+                          <div className="task-card-title">{t.task_name}</div>
+                          {t.description && <div className="task-card-desc">{t.description}</div>}
+                          <div className="task-card-meta">
+                            <span className={`chip chip-priority-${priorityClass(t.priority)}`}>{t.priority}</span>
+                            {t.due_date && (
+                              <span className="chip chip-muted">Due {new Date(t.due_date).toLocaleDateString()}</span>
+                            )}
+                          </div>
+                          {canManageTasks && (
+                            <div className="task-card-actions">
+                              <input
+                                type="datetime-local"
+                                value={reminderInputs[t.id] || ''}
+                                onChange={(e) => setReminderInputs((prev) => ({ ...prev, [t.id]: e.target.value }))}
+                                className="field-select"
+                              />
+                              <select
+                                value={reminderRecipients[t.id] || userId}
+                                onChange={(e) => setReminderRecipients((prev) => ({ ...prev, [t.id]: parseInt(e.target.value) }))}
+                                className="field-select"
+                              >
+                                {members.map((m) => (
+                                  <option key={m.user_id} value={m.user_id}>{m.name}</option>
+                                ))}
+                              </select>
+                              <div className="task-card-actions-row">
+                                <button className="btn-outline-sm" onClick={() => setReminder(t.id)}>Remind me</button>
+                                <button className="btn-outline-sm danger" onClick={() => deleteTask(t.id)}>Delete</button>
+                              </div>
+                            </div>
+                          )}
+                          {reminderStatus[t.id] && (
+                            <div className={`task-status-msg ${reminderStatus[t.id] === 'Reminder set.' ? 'ok' : 'err'}`}>
+                              {reminderStatus[t.id]}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {canManageTasks && (
+                <div className="new-task-form">
+                  <h3 className="panel-title">New Task</h3>
+                  <input
+                    placeholder="Task name"
+                    value={newTaskName}
+                    onChange={(e) => setNewTaskName(e.target.value)}
+                    className="field-input"
+                  />
+                  <textarea
+                    placeholder="Description"
+                    value={newTaskDescription}
+                    onChange={(e) => setNewTaskDescription(e.target.value)}
+                    className="field-textarea"
+                  />
+                  <div className="field-row">
+                    <select
+                      value={newTaskStatus}
+                      onChange={(e) => setNewTaskStatus(e.target.value)}
+                      className="field-select"
+                    >
+                      <option value="To Do">To Do</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Done">Done</option>
+                    </select>
+                    <select
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value)}
+                      className="field-select"
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                    </select>
+                  </div>
+                  <div className="field-row">
+                    <input
+                      type="date"
+                      value={newTaskDueDate}
+                      onChange={(e) => setNewTaskDueDate(e.target.value)}
+                      className="field-input"
+                    />
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="Estimated hours"
+                      value={newTaskHours}
+                      onChange={(e) => setNewTaskHours(e.target.value)}
+                      className="field-input"
+                    />
+                  </div>
+                  <button className="btn btn-primary btn-full" onClick={createTask}>+ Create Task</button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {activeWorkspace && (
-          <div style={{ ...styles.panel, minWidth: 320, flex: 1 }}>
-            <h3 style={styles.panelTitle}>Chat Agent</h3>
-            <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, height: 320, overflowY: 'auto', padding: 12, marginBottom: 10, backgroundColor: '#fafbfc' }}>
-              {chatLog.map((entry, i) => (
-                <p key={i} style={{ margin: '0 0 8px 0' }}>
-                  <strong>{entry.from === 'you' ? 'You' : 'AI'}:</strong> {entry.text}
-                </p>
+          <div className="col-side">
+            <div className="panel">
+              <h3 className="panel-title">
+                Members
+                {currentUserRole && <span className="chip chip-muted">you: {currentUserRole}</span>}
+              </h3>
+              {members.map((m) => (
+                <div className="member-row" key={m.user_id}>
+                  <span className="avatar avatar-sm">{initials(m.name)}</span>
+                  <div className="member-info">
+                    <div className="member-name">{m.name}</div>
+                    <div className="member-email">{m.email}</div>
+                    {canManageMembers ? (
+                      <div className="member-controls">
+                        <select
+                          value={m.role_name}
+                          onChange={(e) => updateMemberRole(m.user_id, e.target.value)}
+                          className="field-select"
+                          style={{ marginBottom: 0 }}
+                        >
+                          {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        {canRemoveMembers && (
+                          <button className="btn-outline-sm danger" onClick={() => removeMember(m.user_id)}>Remove</button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="role-badge">{m.role_name}</div>
+                    )}
+                  </div>
+                </div>
               ))}
+
+              {canManageMembers && (
+                <div style={{ marginTop: 12 }}>
+                  <input
+                    placeholder="User email"
+                    value={newMemberEmail}
+                    onChange={(e) => setNewMemberEmail(e.target.value)}
+                    className="field-input"
+                  />
+                  <select
+                    value={newMemberRole}
+                    onChange={(e) => setNewMemberRole(e.target.value)}
+                    className="field-select"
+                  >
+                    {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <button className="btn btn-primary btn-full" onClick={addMember}>+ Add Member</button>
+                  {memberError && <p className="error-banner" style={{ marginTop: 8 }}>{memberError}</p>}
+                </div>
+              )}
             </div>
-            <input
-              placeholder="Ask the AI to create/update tasks or reminders..."
-              value={chatMessage}
-              onChange={(e) => setChatMessage(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
-              style={styles.input}
-            />
-            <button style={styles.buttonPrimary} onClick={sendChatMessage}>Send</button>
+
+            <div className="panel">
+              <h3 className="panel-title">AI Chat Agent</h3>
+              <div className="chat-window">
+                {chatLog.length === 0 && (
+                  <div className="chat-empty">Ask the AI to create tasks, set reminders, or summarize your project.</div>
+                )}
+                {chatLog.map((entry, i) => (
+                  <div className={`chat-bubble-row ${entry.from}`} key={i}>
+                    <div className={`chat-bubble ${entry.from}`}>{entry.text}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="chat-input-row">
+                <input
+                  placeholder="Ask the AI..."
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
+                  className="field-input"
+                />
+                <button className="btn btn-primary" onClick={sendChatMessage}>Send</button>
+              </div>
+            </div>
           </div>
         )}
       </div>

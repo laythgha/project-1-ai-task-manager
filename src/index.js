@@ -8,6 +8,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const cors = require('cors');
 const Anthropic = require('@anthropic-ai/sdk');
+const { betaTool } = require('@anthropic-ai/sdk/helpers/beta/json-schema');
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const { PrismaClient } = require('./generated/prisma');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -42,56 +43,392 @@ if (require.main === module) {
   }, 60000);
 }
 
-const tools = [
-  {
-    name: "create_task",
-    description: "Create a new task in a project",
-    input_schema: {
-      type: "object",
-      properties: {
-        task_name: { type: "string" },
-        project_id: { type: "integer" }
-      },
-      required: ["task_name", "project_id"]
+// Builds the chat agent's tool set for one request. The tool list itself is the
+// permission boundary: a tool is only ever added when `can(role, module, action)`
+// allows it, so the model has no way to represent an action the user's role
+// forbids — there's nothing to jailbreak into calling. `workspace_id` is closed
+// over server-side (never an argument the model supplies), so a workspace-scoped
+// tool can only ever act on the workspace the user is actually chatting from.
+function buildChatTools({ role, workspace_id, user_id }) {
+  const chatTools = [];
+
+  // Global — creating or listing your own workspaces isn't scoped to any
+  // existing workspace's role (mirrors POST /workspaces, which has no
+  // authorize() check because the caller becomes Owner of a brand-new workspace).
+  chatTools.push(betaTool({
+    name: 'list_my_workspaces',
+    description: "List all workspaces the current user belongs to, with their role in each.",
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: async () => {
+      const memberships = await prisma.workspaceMembership.findMany({
+        where: { user_id },
+        include: { workspace: true, role: true }
+      });
+      if (memberships.length === 0) return 'You are not a member of any workspaces yet.';
+      return memberships
+        .map((m) => `#${m.workspace.id} "${m.workspace.workspace_name}" — your role: ${m.role.role_name}`)
+        .join('\n');
     }
-  },
-  {
-    name: "update_task",
-    description: "Update an existing task's name or priority",
-    input_schema: {
-      type: "object",
-      properties: {
-        task_id: { type: "integer" },
-        task_name: { type: "string" },
-        priority: { type: "string", enum: ["Low", "Medium", "High"] }
-      },
-      required: ["task_id"]
+  }));
+
+  chatTools.push(betaTool({
+    name: 'create_workspace',
+    description: 'Create a brand new workspace. The current user becomes its Owner. Not restricted by role in any other workspace.',
+    inputSchema: {
+      type: 'object',
+      properties: { workspace_name: { type: 'string', description: 'Name for the new workspace' } },
+      required: ['workspace_name'],
+      additionalProperties: false
+    },
+    run: async ({ workspace_name }) => {
+      const workspace = await prisma.workspaces.create({ data: { workspace_name } });
+      const ownerRole = await prisma.roles.findFirst({ where: { role_name: 'Owner' } });
+      await prisma.workspaceMembership.create({
+        data: { user_id, workspace_id: workspace.id, role_id: ownerRole.id }
+      });
+      return `Created workspace "${workspace_name}" (#${workspace.id}). You are its Owner.`;
     }
-  },
-  {
-    name: "create_reminder",
-    description: "Create a reminder for a task at a specific date and time",
-    input_schema: {
-      type: "object",
-      properties: {
-        task_id: { type: "integer" },
-        remind_at: { type: "string", description: "ISO 8601 date-time string" }
-      },
-      required: ["task_id", "remind_at"]
+  }));
+
+  if (!workspace_id || !role) return chatTools;
+
+  // Read tools — every role, including Viewer, has 'read' on everything.
+  chatTools.push(betaTool({
+    name: 'list_projects',
+    description: 'List all projects in the workspace the user is currently chatting from.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: async () => {
+      const projects = await prisma.projects.findMany({ where: { workspace_id } });
+      if (projects.length === 0) return 'No projects in this workspace yet.';
+      return projects.map((p) => `#${p.id} "${p.project_name}"`).join('\n');
     }
-  },
-  {
-    name: "delete_task",
-    description: "Delete an existing task",
-    input_schema: {
-      type: "object",
-      properties: {
-        task_id: { type: "integer" }
-      },
-      required: ["task_id"]
+  }));
+
+  chatTools.push(betaTool({
+    name: 'list_tasks',
+    description: 'List all tasks in a project. Call list_projects first to find the project_id.',
+    inputSchema: {
+      type: 'object',
+      properties: { project_id: { type: 'integer', description: 'ID of the project, from list_projects' } },
+      required: ['project_id'],
+      additionalProperties: false
+    },
+    run: async ({ project_id }) => {
+      const project = await prisma.projects.findUnique({ where: { id: project_id } });
+      if (!project || project.workspace_id !== workspace_id) return 'No such project in this workspace.';
+      const tasks = await prisma.tasks.findMany({ where: { project_id } });
+      if (tasks.length === 0) return `No tasks in "${project.project_name}" yet.`;
+      return tasks
+        .map((t) => `#${t.id} "${t.task_name}" — status: ${t.status}, priority: ${t.priority}` +
+          (t.due_date ? `, due: ${t.due_date.toISOString().split('T')[0]}` : '') +
+          (t.description ? `, notes: ${t.description}` : ''))
+        .join('\n');
     }
+  }));
+
+  chatTools.push(betaTool({
+    name: 'list_members',
+    description: 'List all members of the current workspace with their roles.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: async () => {
+      const memberships = await prisma.workspaceMembership.findMany({
+        where: { workspace_id },
+        include: { user: true, role: true }
+      });
+      return memberships.map((m) => `${m.user.name} <${m.user.email}> — ${m.role.role_name}`).join('\n');
+    }
+  }));
+
+  // Write tools — each only exists in the tool set when this role is allowed
+  // the matching action, per the exact same permission matrix the REST API enforces.
+  if (can(role, 'workspace', 'update')) {
+    chatTools.push(betaTool({
+      name: 'rename_workspace',
+      description: 'Rename the current workspace.',
+      inputSchema: {
+        type: 'object',
+        properties: { workspace_name: { type: 'string' } },
+        required: ['workspace_name'],
+        additionalProperties: false
+      },
+      run: async ({ workspace_name }) => {
+        const workspace = await prisma.workspaces.update({ where: { id: workspace_id }, data: { workspace_name } });
+        io.to(`workspace_${workspace_id}`).emit('workspace_updated', workspace);
+        return `Renamed the workspace to "${workspace_name}".`;
+      }
+    }));
   }
-];
+
+  if (can(role, 'workspace', 'delete')) {
+    chatTools.push(betaTool({
+      name: 'delete_workspace',
+      description: 'Delete the current workspace, including all of its projects and tasks. This cannot be undone.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      run: async () => {
+        const workspace = await prisma.workspaces.findUnique({ where: { id: workspace_id } });
+        await prisma.workspaces.delete({ where: { id: workspace_id } });
+        io.to(`workspace_${workspace_id}`).emit('workspace_deleted', { id: workspace_id });
+        return `Deleted workspace "${workspace?.workspace_name ?? workspace_id}".`;
+      }
+    }));
+  }
+
+  if (can(role, 'project', 'create')) {
+    chatTools.push(betaTool({
+      name: 'create_project',
+      description: 'Create a new project in the current workspace.',
+      inputSchema: {
+        type: 'object',
+        properties: { project_name: { type: 'string' } },
+        required: ['project_name'],
+        additionalProperties: false
+      },
+      run: async ({ project_name }) => {
+        const project = await prisma.projects.create({ data: { project_name, workspace_id } });
+        io.to(`workspace_${workspace_id}`).emit('project_created', project);
+        return `Created project "${project_name}" (#${project.id}).`;
+      }
+    }));
+  }
+
+  if (can(role, 'project', 'delete')) {
+    chatTools.push(betaTool({
+      name: 'delete_project',
+      description: 'Delete a project and all of its tasks. Call list_projects first to find the project_id.',
+      inputSchema: {
+        type: 'object',
+        properties: { project_id: { type: 'integer' } },
+        required: ['project_id'],
+        additionalProperties: false
+      },
+      run: async ({ project_id }) => {
+        const project = await prisma.projects.findUnique({ where: { id: project_id } });
+        if (!project || project.workspace_id !== workspace_id) return 'No such project in this workspace.';
+        await prisma.projects.delete({ where: { id: project_id } });
+        io.to(`workspace_${workspace_id}`).emit('project_deleted', { id: project_id });
+        return `Deleted project "${project.project_name}".`;
+      }
+    }));
+  }
+
+  if (can(role, 'task', 'create')) {
+    chatTools.push(betaTool({
+      name: 'create_task',
+      description: 'Create a new task in a project. Call list_projects first to find the project_id.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'integer' },
+          task_name: { type: 'string' },
+          description: { type: 'string' },
+          status: { type: 'string', enum: ['To Do', 'In Progress', 'Done'] },
+          priority: { type: 'string', enum: ['Low', 'Medium', 'High'] },
+          due_date: { type: 'string', description: 'ISO 8601 date, e.g. 2026-08-05' },
+          estimated_hours: { type: 'number' }
+        },
+        required: ['project_id', 'task_name'],
+        additionalProperties: false
+      },
+      run: async ({ project_id, task_name, description, status, priority, due_date, estimated_hours }) => {
+        const project = await prisma.projects.findUnique({ where: { id: project_id } });
+        if (!project || project.workspace_id !== workspace_id) return 'No such project in this workspace.';
+        const task = await prisma.tasks.create({
+          data: {
+            project_id,
+            task_name,
+            description,
+            status: status || 'To Do',
+            priority: priority || 'Medium',
+            due_date: due_date ? new Date(due_date) : undefined,
+            estimated_hours
+          }
+        });
+        io.to(`workspace_${workspace_id}`).emit('task_created', task);
+        return `Created task "${task_name}" (#${task.id}) in "${project.project_name}".`;
+      }
+    }));
+  }
+
+  if (can(role, 'task', 'update')) {
+    chatTools.push(betaTool({
+      name: 'update_task',
+      description: 'Update a task — rename it, change its status, re-prioritize it, adjust its due date or description. Call list_tasks first to find the task_id.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'integer' },
+          task_name: { type: 'string' },
+          description: { type: 'string' },
+          status: { type: 'string', enum: ['To Do', 'In Progress', 'Done'] },
+          priority: { type: 'string', enum: ['Low', 'Medium', 'High'], description: 'Use this to prioritize or re-prioritize a task' },
+          due_date: { type: 'string', description: 'ISO 8601 date, e.g. 2026-08-05' },
+          estimated_hours: { type: 'number' }
+        },
+        required: ['task_id'],
+        additionalProperties: false
+      },
+      run: async ({ task_id, task_name, description, status, priority, due_date, estimated_hours }) => {
+        const existing = await prisma.tasks.findUnique({ where: { id: task_id }, include: { project: true } });
+        if (!existing || existing.project.workspace_id !== workspace_id) return 'No such task in this workspace.';
+        const task = await prisma.tasks.update({
+          where: { id: task_id },
+          data: {
+            ...(task_name !== undefined && { task_name }),
+            ...(description !== undefined && { description }),
+            ...(status !== undefined && { status }),
+            ...(priority !== undefined && { priority }),
+            ...(due_date !== undefined && { due_date: new Date(due_date) }),
+            ...(estimated_hours !== undefined && { estimated_hours })
+          }
+        });
+        io.to(`workspace_${workspace_id}`).emit('task_updated', task);
+        return `Updated task "${task.task_name}" (status: ${task.status}, priority: ${task.priority}).`;
+      }
+    }));
+  }
+
+  if (can(role, 'task', 'delete')) {
+    chatTools.push(betaTool({
+      name: 'delete_task',
+      description: 'Delete a task. Call list_tasks first to find the task_id.',
+      inputSchema: {
+        type: 'object',
+        properties: { task_id: { type: 'integer' } },
+        required: ['task_id'],
+        additionalProperties: false
+      },
+      run: async ({ task_id }) => {
+        const existing = await prisma.tasks.findUnique({ where: { id: task_id }, include: { project: true } });
+        if (!existing || existing.project.workspace_id !== workspace_id) return 'No such task in this workspace.';
+        await prisma.tasks.delete({ where: { id: task_id } });
+        io.to(`workspace_${workspace_id}`).emit('task_deleted', { id: task_id });
+        return `Deleted task "${existing.task_name}".`;
+      }
+    }));
+  }
+
+  if (can(role, 'reminder', 'create')) {
+    chatTools.push(betaTool({
+      name: 'create_reminder',
+      description: 'Set a reminder for a task at a specific date and time. Call list_tasks first to find the task_id, and list_members first if setting it for someone other than the current user.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          task_id: { type: 'integer' },
+          remind_at: { type: 'string', description: 'ISO 8601 date-time string' },
+          recipient_email: { type: 'string', description: "Email of the workspace member to remind. Defaults to the current user if omitted." }
+        },
+        required: ['task_id', 'remind_at'],
+        additionalProperties: false
+      },
+      run: async ({ task_id, remind_at, recipient_email }) => {
+        const existing = await prisma.tasks.findUnique({ where: { id: task_id }, include: { project: true } });
+        if (!existing || existing.project.workspace_id !== workspace_id) return 'No such task in this workspace.';
+
+        let recipient_id = user_id;
+        if (recipient_email) {
+          const recipientUser = await prisma.users.findUnique({ where: { email: recipient_email } });
+          const recipientRole = recipientUser ? await getUserRoleInWorkspace(recipientUser.id, workspace_id) : null;
+          if (!recipientUser || !recipientRole) return `${recipient_email} is not a member of this workspace.`;
+          recipient_id = recipientUser.id;
+        }
+
+        const reminder = await prisma.reminders.create({
+          data: { task_id, user_id: recipient_id, reminder_date: new Date(remind_at), sent: false }
+        });
+        io.to(`workspace_${workspace_id}`).emit('reminder_created', reminder);
+        return `Reminder set for "${existing.task_name}" at ${reminder.reminder_date.toISOString()}.`;
+      }
+    }));
+  }
+
+  if (can(role, 'member', 'create')) {
+    chatTools.push(betaTool({
+      name: 'add_member',
+      description: 'Invite an existing user to the current workspace by email, with a given role.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          email: { type: 'string' },
+          role_name: { type: 'string', enum: ['Owner', 'Admin', 'Member', 'Viewer'] }
+        },
+        required: ['email', 'role_name'],
+        additionalProperties: false
+      },
+      run: async ({ email, role_name }) => {
+        const targetUser = await prisma.users.findUnique({ where: { email } });
+        if (!targetUser) return `No user found with email ${email}. They need to sign up first.`;
+        const existingMembership = await prisma.workspaceMembership.findFirst({
+          where: { user_id: targetUser.id, workspace_id }
+        });
+        if (existingMembership) return `${email} is already a member of this workspace.`;
+        const targetRole = await prisma.roles.findFirst({ where: { role_name } });
+        if (!targetRole) return `"${role_name}" is not a valid role.`;
+        await prisma.workspaceMembership.create({
+          data: { user_id: targetUser.id, workspace_id, role_id: targetRole.id }
+        });
+        const member = { user_id: targetUser.id, name: targetUser.name, email: targetUser.email, role_name: targetRole.role_name };
+        io.to(`workspace_${workspace_id}`).emit('member_added', member);
+        return `Added ${targetUser.name} <${email}> to the workspace as ${role_name}.`;
+      }
+    }));
+  }
+
+  if (can(role, 'member', 'update')) {
+    chatTools.push(betaTool({
+      name: 'update_member_role',
+      description: "Change a workspace member's role. Call list_members first to confirm who's in the workspace.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          email: { type: 'string' },
+          role_name: { type: 'string', enum: ['Owner', 'Admin', 'Member', 'Viewer'] }
+        },
+        required: ['email', 'role_name'],
+        additionalProperties: false
+      },
+      run: async ({ email, role_name }) => {
+        const targetUser = await prisma.users.findUnique({ where: { email } });
+        if (!targetUser) return `No user found with email ${email}.`;
+        const membership = await prisma.workspaceMembership.findFirst({
+          where: { user_id: targetUser.id, workspace_id }
+        });
+        if (!membership) return `${email} is not a member of this workspace.`;
+        const targetRole = await prisma.roles.findFirst({ where: { role_name } });
+        if (!targetRole) return `"${role_name}" is not a valid role.`;
+        await prisma.workspaceMembership.update({ where: { id: membership.id }, data: { role_id: targetRole.id } });
+        io.to(`workspace_${workspace_id}`).emit('member_updated', { user_id: targetUser.id, role_name });
+        return `${email} is now ${role_name}.`;
+      }
+    }));
+  }
+
+  if (can(role, 'member', 'delete')) {
+    chatTools.push(betaTool({
+      name: 'remove_member',
+      description: "Remove a member from the current workspace (\"kick\" them). Call list_members first to confirm who's in the workspace.",
+      inputSchema: {
+        type: 'object',
+        properties: { email: { type: 'string' } },
+        required: ['email'],
+        additionalProperties: false
+      },
+      run: async ({ email }) => {
+        const targetUser = await prisma.users.findUnique({ where: { email } });
+        if (!targetUser) return `No user found with email ${email}.`;
+        const membership = await prisma.workspaceMembership.findFirst({
+          where: { user_id: targetUser.id, workspace_id }
+        });
+        if (!membership) return `${email} is not a member of this workspace.`;
+        await prisma.workspaceMembership.delete({ where: { id: membership.id } });
+        io.to(`workspace_${workspace_id}`).emit('member_removed', { user_id: targetUser.id });
+        return `Removed ${email} from the workspace.`;
+      }
+    }));
+  }
+
+  return chatTools;
+}
 
 app.use(express.json());
 app.use(passport.initialize());
@@ -397,10 +734,10 @@ app.get('/users/:user_id/workspaces', authenticate, async (req, res) => {
 
   const memberships = await prisma.workspaceMembership.findMany({
     where: { user_id },
-    include: { workspace: true }
+    include: { workspace: true, role: true }
   });
 
-  const workspaces = memberships.map(m => m.workspace);
+  const workspaces = memberships.map(m => ({ ...m.workspace, role_name: m.role.role_name }));
 
   res.send(workspaces);
 });
@@ -520,86 +857,61 @@ app.post('/reminders', authenticate, async (req, res) => {
 });
 
 app.post('/chat', authenticate, async (req, res) => {
-  const { message, workspace_id } = req.body;
-  const role = await getUserRoleInWorkspace(req.user_id, workspace_id);
-  if (!role) {
-    return res.status(403).send({ message: 'You are not a member of this workspace' });
+  const { message, workspace_id, history } = req.body;
+  if (!message) {
+    return res.status(400).send({ message: 'message is required' });
   }
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
-    max_tokens: 500,
-    system: `Today's date is ${new Date().toISOString().split('T')[0]}. When the user gives a relative or partial date (like "tomorrow" or "August 5th"), resolve it to a full date using today's date as reference.`,
-    tools: tools,
-    messages: [
-      { role: 'user', content: message }
-    ]
-  });
-
-  const toolUse = response.content.find(block => block.type === 'tool_use');
-
-  if (!toolUse) {
-    const textBlock = response.content.find(block => block.type === 'text');
-    return res.send({ reply: textBlock.text });
-  }
-
-  if (toolUse.name === 'create_task') {
-    if (!can(role, 'task', 'create')) {
-      return res.status(403).send({ message: 'Your role does not allow creating tasks' });
+  let role = null;
+  let workspace = null;
+  if (workspace_id) {
+    role = await getUserRoleInWorkspace(req.user_id, workspace_id);
+    if (!role) {
+      return res.status(403).send({ message: 'You are not a member of this workspace' });
     }
-    const task = await prisma.tasks.create({
-      data: {
-        task_name: toolUse.input.task_name,
-        project_id: toolUse.input.project_id
-      }
-    });
-    io.to(`workspace_${workspace_id}`).emit('task_created', task);
-    return res.send({ reply: `Created task: ${task.task_name}`, taskId: task.id });
+    workspace = await prisma.workspaces.findUnique({ where: { id: workspace_id } });
   }
 
-  if (toolUse.name === 'update_task') {
-    if (!can(role, 'task', 'update')) {
-      return res.status(403).send({ message: 'Your role does not allow updating tasks' });
+  const chatTools = buildChatTools({ role, workspace_id: workspace_id || null, user_id: req.user_id });
+
+  const systemPrompt = [
+    'You are the AI assistant embedded in AI Task Manager, a workspace/project/task manager.',
+    `Today's date is ${new Date().toISOString().split('T')[0]}. Resolve relative dates ("tomorrow", "August 5th") against it.`,
+    workspace
+      ? `The user is chatting from workspace "${workspace.workspace_name}" (#${workspace.id}), where their role is ${role}.`
+      : 'The user is not currently viewing a specific workspace.',
+    "The tools you were given already reflect exactly what this user's role permits — nothing more, nothing less. If they ask for something you have no tool for (e.g. a Viewer asking to create or delete something, or an Admin asking to remove a member), plainly say your role does not allow it and suggest who could (usually an Owner or Admin) — never claim to have done it.",
+    'Look up IDs via list_projects / list_tasks / list_members before acting on something the user only named — do not guess IDs.',
+    'Be concise.'
+  ].join(' ');
+
+  const conversationHistory = Array.isArray(history)
+    ? history.slice(-20).map((entry) => ({
+        role: entry.from === 'you' ? 'user' : 'assistant',
+        content: entry.text
+      }))
+    : [];
+
+  try {
+    const finalMessage = await anthropic.beta.messages.toolRunner({
+      model: 'claude-opus-5',
+      max_tokens: 4096,
+      system: systemPrompt,
+      tools: chatTools,
+      messages: [...conversationHistory, { role: 'user', content: message }],
+      max_iterations: 8
+    });
+
+    if (finalMessage.stop_reason === 'refusal') {
+      return res.send({ reply: "I can't help with that request." });
     }
-    const task = await prisma.tasks.update({
-      where: { id: toolUse.input.task_id },
-      data: {
-        ...(toolUse.input.task_name && { task_name: toolUse.input.task_name }),
-        ...(toolUse.input.priority && { priority: toolUse.input.priority })
-      }
-    });
-    io.to(`workspace_${workspace_id}`).emit('task_updated', task);
-    return res.send({ reply: `Updated task: ${task.task_name} (priority: ${task.priority})` });
-  }
 
-  if (toolUse.name === 'delete_task') {
-    if (!can(role, 'task', 'delete')) {
-      return res.status(403).send({ message: 'Your role does not allow deleting tasks' });
-    }
-    const task = await prisma.tasks.delete({
-      where: { id: toolUse.input.task_id }
-    });
-    io.to(`workspace_${workspace_id}`).emit('task_deleted', { id: task.id });
-    return res.send({ reply: `Deleted task: ${task.task_name}` });
+    const textBlock = finalMessage.content.find((block) => block.type === 'text');
+    return res.send({ reply: textBlock ? textBlock.text : "Done, but I don't have anything else to add." });
+  } catch (err) {
+    console.error('Chat agent error:', err);
+    return res.status(500).send({ message: 'The AI assistant ran into an error. Please try again.' });
   }
-
-  if (toolUse.name === 'create_reminder') {
-    if (!can(role, 'reminder', 'create')) {
-      return res.status(403).send({ message: 'Your role does not allow creating reminders' });
-    }
-    const reminder = await prisma.reminders.create({
-      data: {
-        task_id: toolUse.input.task_id,
-        user_id: req.user_id,
-        reminder_date: new Date(toolUse.input.remind_at),
-        sent: false
-      }
-    });
-    io.to(`workspace_${workspace_id}`).emit('reminder_created', reminder);
-    return res.send({ reply: `Reminder created for ${reminder.reminder_date}` });
-  }
-
-  res.status(400).send({ message: 'Unknown action requested' });
 });
 
 app.get('/auth/google',
