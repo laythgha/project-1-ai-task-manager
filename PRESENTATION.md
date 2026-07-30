@@ -12,8 +12,8 @@ Fill this file in as you go. This is what you submit and what you present from o
 - Live URL: https://project-1-ai-task-manager-1frontt.onrender.com
 - Repository:
 - Project board:
-- Loom walkthrough video:
-
+- Loom walkthrough video: https://www.loom.com/share/f14bfecd3be8488199d15a86a3ebeabc
+ 
 ## Artifacts
 
 - Software Requirements Specification (docs/srs.md):
