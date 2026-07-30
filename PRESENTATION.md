@@ -19,8 +19,8 @@ Fill this file in as you go. This is what you submit and what you present from o
 - Software Requirements Specification (docs/srs.md): https://github.com/laythgha/project-1-ai-task-manager/blob/main/docs/srs.md
 - System diagram (docs/system-diagram.drawio): https://github.com/laythgha/project-1-ai-task-manager/blob/main/docs/Screenshot%202026-07-30%20005115.png
 - Test plan (docs/test-plan.md): https://github.com/laythgha/project-1-ai-task-manager/blob/main/docs/test-plan.md
-- Permissions matrix, confirmed working (screenshot in proof):
-- Reminder email, confirmed received (screenshot in proof):
+- Permissions matrix, confirmed working (screenshot in proof): https://github.com/laythgha/project-1-ai-task-manager/blob/main/proof/Screenshot%202026-07-30%20010018.png
+- Reminder email, confirmed received (screenshot in proof): 
 - Real time sync across two sessions (screenshot or short clip in proof): https://www.loom.com/share/3bc7e2aa642c4d639825cf9d8e9d00bc
 
 ## Proof of learning
