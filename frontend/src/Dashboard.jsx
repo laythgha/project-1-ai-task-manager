@@ -182,11 +182,10 @@ function Dashboard({ userId, onLogout }) {
 
   const createProject = async () => {
     if (!newProjectName || !activeWorkspace) return;
-    const res = await api.post('/projects', {
+    await api.post('/projects', {
       project_name: newProjectName,
       workspace_id: activeWorkspace.id,
     });
-    setProjects((prev) => [...prev, { id: res.data.projectId, project_name: newProjectName, workspace_id: activeWorkspace.id }]);
     setNewProjectName('');
   };
 

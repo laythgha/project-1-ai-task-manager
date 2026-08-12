@@ -534,17 +534,24 @@ app.get('/', (req, res) => {
 
 app.post('/signup', async (req, res) => {
   const { name, email, password } = req.body;
-  const password_hashed = await bcrypt.hash(password, 10);
-  const user = await prisma.users.create({
-    data: {
-      name,
-      email,
-      password_hashed,
-      signin_method: 'password'
+  try {
+    const password_hashed = await bcrypt.hash(password, 10);
+    const user = await prisma.users.create({
+      data: {
+        name,
+        email,
+        password_hashed,
+        signin_method: 'password'
+      }
+    });
+    const token = generateToken(user.id);
+    res.send({ message: 'User created', userId: user.id, token });
+  } catch (err) {
+    if (err.code === 'P2002') {
+      return res.status(409).send({ message: 'An account with that email already exists' });
     }
-  });
-  const token = generateToken(user.id);
-  res.send({ message: 'User created', userId: user.id, token });
+    throw err;
+  }
 });
 
 app.post('/login', async (req, res) => {
