@@ -27,15 +27,15 @@ Fill this file in as you go. This is what you submit and what you present from o
 
 One line per area: what you learned and your confidence from one to three. Pull these from LEARNING_LOG.md.
 
-- Database design: how to organize data
-- Authentication and authorization: making sure the person is who they are and what they can do 
-- REST API construction: set of urls so other apps can tell it to do things
-- Prompt engineering and tool calling: practice of structuring your instructions to an LLM
-- WebSockets and real time sync: connection stays open between server and client
-- Gmail integration: connecting gmail with OAuth
-- Test driven development: writing tests that catch bugs
-- Git workflow and code review: when somebody else looks at the code before it gets pushed
-- Debugging: a program that is behaving in an unexpected way and finding out the reason
+- Database design: how to organize data 2
+- Authentication and authorization: making sure the person is who they are and what they can do 3
+- REST API construction: set of urls so other apps can tell it to do things 2
+- Prompt engineering and tool calling: practice of structuring your instructions to an LLM 3
+- WebSockets and real time sync: connection stays open between server and client 2
+- Gmail integration: connecting gmail with OAuth 3
+- Test driven development: writing tests that catch bugs 3
+- Git workflow and code review: when somebody else looks at the code before it gets pushed 2
+- Debugging: a program that is behaving in an unexpected way and finding out the reason 3
  
 ## Summary
 
