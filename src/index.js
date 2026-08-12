@@ -1,5 +1,13 @@
 require('dotenv').config();
 
+// An unhandled rejection anywhere (e.g. a callback passport doesn't await, like
+// the Google strategy's verify function below) crashes the whole process by
+// default on modern Node, taking down every in-flight request, not just the
+// one that triggered it. Log it instead of letting the process die.
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -439,19 +447,23 @@ passport.use(new GoogleStrategy({
   callbackURL: process.env.BACKEND_URL + "/auth/google/callback"
 },
 async (accessToken, refreshToken, profile, done) => {
-  const email = profile.emails[0].value;
-  let user = await prisma.users.findUnique({ where: { email } });
-  if (!user) {
-    user = await prisma.users.create({
-      data: {
-        name: profile.displayName,
-        email: email,
-        password_hashed: '',
-        signin_method: 'google'
-      }
-    });
+  try {
+    const email = profile.emails[0].value;
+    let user = await prisma.users.findUnique({ where: { email } });
+    if (!user) {
+      user = await prisma.users.create({
+        data: {
+          name: profile.displayName,
+          email: email,
+          password_hashed: '',
+          signin_method: 'google'
+        }
+      });
+    }
+    return done(null, user);
+  } catch (err) {
+    return done(err);
   }
-  return done(null, user);
 }));
 
 async function getUserRoleInWorkspace(user_id, workspace_id) {
