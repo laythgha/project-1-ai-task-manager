@@ -27,16 +27,17 @@ Fill this file in as you go. This is what you submit and what you present from o
 
 One line per area: what you learned and your confidence from one to three. Pull these from LEARNING_LOG.md.
 
-- Database design:
-- Authentication and authorization:
-- REST API construction:
-- Prompt engineering and tool calling:
-- WebSockets and real time sync:
-- Gmail integration:
-- Test driven development:
-- Git workflow and code review:
-- Debugging:
-
+- Database design: how to organize data
+- Authentication and authorization: making sure the person is who they are and what they can do 
+- REST API construction: set of urls so other apps can tell it to do things
+- Prompt engineering and tool calling: practice of structuring your instructions to an LLM
+- WebSockets and real time sync: connection stays open between server and client
+- Gmail integration: connecting gmail with OAuth
+- Test driven development: writing tests that catch bugs
+- Git workflow and code review: when somebody else looks at the code before it gets pushed
+- Debugging: a program that is behaving in an unexpected way and finding out the reason
+ 
 ## Summary
 
 In your own words, a short paragraph on what you built and what you learned. This is what you will walk through on the call.
+Built a full stack AI task manager similar to Trello with an AI assistant built in. Users can sign in by creating an account or through their gmail account. You can create workspaces and projects. With those projects you can share tasks to remote teams. Furthermore you can notify members in the workspace about certain tasks. Found a bug where the server was trusting information sent by the user instead of checking the data and fixed that so someone couldn't edit data. That shows to always verify by checking the database. Also learned alot about deployment getting, obviously having something local host is different than having it live.
