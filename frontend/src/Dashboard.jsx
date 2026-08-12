@@ -165,7 +165,7 @@ function Dashboard({ userId, onLogout }) {
   const createWorkspace = async () => {
     if (!newWorkspaceName) return;
     const res = await api.post('/workspaces', { workspace_name: newWorkspaceName });
-    setWorkspaces((prev) => [...prev, { id: res.data.workspaceId, workspace_name: newWorkspaceName }]);
+    setWorkspaces((prev) => [...prev, { id: res.data.workspaceId, workspace_name: newWorkspaceName, role_name: 'Owner' }]);
     setNewWorkspaceName('');
   };
 
